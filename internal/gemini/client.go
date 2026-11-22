@@ -51,7 +51,7 @@ func NewClient(apiKey, model, promptsDir string) *Client {
 		model:      model,
 		promptsDir: promptsDir,
 		httpClient: &http.Client{
-			Timeout: 45 * time.Second,
+			Timeout: 150 * time.Second,
 		},
 	}
 }

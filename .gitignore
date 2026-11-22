@@ -1,0 +1,26 @@
+# Binaries & build outputs
+bin/
+dist/
+/server
+/threads-news
+*.exe
+*.out
+*.test
+
+# Environment & secret files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*secret*
+*credentials*.json
+*service-account*.json
+
+# Go / IDE / OS
+vendor/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

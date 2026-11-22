@@ -1,0 +1,14 @@
+Search for the latest {{.Count}} practical daily-life news updates from Ireland as of {{.Date}} (such as weather alerts from Met Eireann, public transport updates like Dublin Bus/Luas/DART, cost of living, housing, visa/IRP updates, and local events or weekend happenings).
+
+Target audience:
+- Expats, working holiday makers, and language students living in or moving to Ireland.
+
+Avoid:
+- Heavy domestic party politics unless it directly affects daily life, visas, or public transport.
+
+Rules:
+- Output ONLY the post text (no intro, no markdown bolding, no code blocks).
+- Total length MUST be 480 characters or less.
+- Start with a short header line with the date and Ireland flag emoji.
+- Use concise bullet points for each item.
+- End with 2-3 relevant hashtags like #Ireland #LifeInIreland.

@@ -1,0 +1,12 @@
+.git/
+.gitignore
+.env
+.env.*
+*.pem
+*.key
+*secret*
+*credentials*.json
+*service-account*.json
+README.md
+bin/
+dist/

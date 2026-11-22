@@ -183,13 +183,14 @@ func (c *Client) FetchIrelandNewsHeadlines(ctx context.Context, language string,
 		if chunk.Web == nil || chunk.Web.URI == "" {
 			continue
 		}
-		if _, ok := seen[chunk.Web.URI]; ok {
+		resolvedURI := c.resolveRedirectURL(ctx, chunk.Web.URI)
+		if _, ok := seen[resolvedURI]; ok {
 			continue
 		}
-		seen[chunk.Web.URI] = struct{}{}
+		seen[resolvedURI] = struct{}{}
 		sources = append(sources, Source{
 			Title: chunk.Web.Title,
-			URI:   chunk.Web.URI,
+			URI:   resolvedURI,
 		})
 	}
 
@@ -197,6 +198,37 @@ func (c *Client) FetchIrelandNewsHeadlines(ctx context.Context, language string,
 		PostText: text,
 		Sources:  sources,
 	}, nil
+}
+
+// resolveRedirectURL resolves Gemini grounding redirect URLs to the actual article URL.
+func (c *Client) resolveRedirectURL(ctx context.Context, rawURL string) string {
+	if !strings.Contains(rawURL, "vertexaisearch.cloud.google.com/grounding-api-redirect/") {
+		return rawURL
+	}
+	resolveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	req, err := http.NewRequestWithContext(resolveCtx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return rawURL
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return rawURL
+	}
+	defer resp.Body.Close()
+
+	if loc := strings.TrimSpace(resp.Header.Get("Location")); loc != "" {
+		return loc
+	}
+	return rawURL
 }
 
 func (c *Client) renderPrompt(language string, count int) (string, error) {

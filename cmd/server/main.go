@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"threads-news/internal/config"
 	"threads-news/internal/gemini"
@@ -26,10 +28,12 @@ type publishRequest struct {
 }
 
 type publishResponse struct {
-	DryRun   bool                   `json:"dry_run"`
-	PostText string                 `json:"post_text"`
-	Sources  []gemini.Source        `json:"sources,omitempty"`
-	Threads  *threads.PublishResult `json:"threads,omitempty"`
+	DryRun     bool                    `json:"dry_run"`
+	PostText   string                  `json:"post_text"`
+	ReplyTexts []string                `json:"reply_texts,omitempty"`
+	Sources    []gemini.Source         `json:"sources,omitempty"`
+	Threads    *threads.PublishResult  `json:"threads,omitempty"`
+	Replies    []threads.PublishResult `json:"replies,omitempty"`
 }
 
 func main() {
@@ -65,10 +69,12 @@ func main() {
 			return
 		}
 
+		replyTexts := buildSourceReplies(news.Sources, lang)
 		writeJSON(w, http.StatusOK, publishResponse{
-			DryRun:   true,
-			PostText: news.PostText,
-			Sources:  news.Sources,
+			DryRun:     true,
+			PostText:   news.PostText,
+			ReplyTexts: replyTexts,
+			Sources:    news.Sources,
 		})
 	}))
 
@@ -97,11 +103,14 @@ func main() {
 			return
 		}
 
+		replyTexts := buildSourceReplies(news.Sources, lang)
+
 		if dryRun {
 			writeJSON(w, http.StatusOK, publishResponse{
-				DryRun:   true,
-				PostText: news.PostText,
-				Sources:  news.Sources,
+				DryRun:     true,
+				PostText:   news.PostText,
+				ReplyTexts: replyTexts,
+				Sources:    news.Sources,
 			})
 			return
 		}
@@ -114,11 +123,35 @@ func main() {
 		}
 
 		logger.Info("published Ireland news to Threads", "post_id", pubRes.PostID, "container_id", pubRes.ContainerID)
+
+		var replies []threads.PublishResult
+		parentID := pubRes.PostID
+		for i, replyText := range replyTexts {
+			// Brief pause between chained posts so Threads indexes the parent post.
+			select {
+			case <-r.Context().Done():
+				writeError(w, http.StatusRequestTimeout, r.Context().Err().Error())
+				return
+			case <-time.After(2 * time.Second):
+			}
+
+			repRes, err := threadsClient.PublishReplyPost(r.Context(), parentID, replyText)
+			if err != nil {
+				logger.Error("failed to publish reply to threads", "reply_index", i, "parent_id", parentID, "error", err)
+				break
+			}
+			logger.Info("published source links reply to Threads", "reply_index", i, "post_id", repRes.PostID, "parent_id", parentID)
+			replies = append(replies, *repRes)
+			parentID = repRes.PostID
+		}
+
 		writeJSON(w, http.StatusOK, publishResponse{
-			DryRun:   false,
-			PostText: news.PostText,
-			Sources:  news.Sources,
-			Threads:  pubRes,
+			DryRun:     false,
+			PostText:   news.PostText,
+			ReplyTexts: replyTexts,
+			Sources:    news.Sources,
+			Threads:    pubRes,
+			Replies:    replies,
 		})
 	}))
 
@@ -228,4 +261,68 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// buildSourceReplies formats resolved source URLs into one or more Threads replies,
+// each safely within Threads' 500-character limit.
+func buildSourceReplies(sources []gemini.Source, language string) []string {
+	if len(sources) == 0 {
+		return nil
+	}
+
+	const maxReplyRunes = 480
+	const maxSources = 4
+
+	header := "🔗 参考リンク（記事元）"
+	if strings.EqualFold(language, "en") {
+		header = "🔗 Source links"
+	}
+
+	var entries []string
+	for _, s := range sources {
+		if len(entries) >= maxSources {
+			break
+		}
+		uri := strings.TrimSpace(s.URI)
+		if uri == "" {
+			continue
+		}
+		// Skip unresolved Vertex redirect URLs that are too long and ugly for users.
+		if strings.Contains(uri, "vertexaisearch.cloud.google.com/grounding-api-redirect/") && utf8.RuneCountInString(uri) > 150 {
+			continue
+		}
+		title := strings.TrimSpace(s.Title)
+		var entry string
+		if title != "" {
+			entry = fmt.Sprintf("・%s\n%s", title, uri)
+		} else {
+			entry = fmt.Sprintf("・%s", uri)
+		}
+		if utf8.RuneCountInString(entry) > maxReplyRunes-30 {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 0 {
+		return nil
+	}
+
+	var replies []string
+	current := header
+	for _, entry := range entries {
+		candidate := current + "\n" + entry
+		if utf8.RuneCountInString(candidate) <= maxReplyRunes {
+			current = candidate
+			continue
+		}
+		if current != header {
+			replies = append(replies, current)
+		}
+		current = header + "\n" + entry
+	}
+	if current != header {
+		replies = append(replies, current)
+	}
+	return replies
 }

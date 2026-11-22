@@ -63,6 +63,18 @@ type apiErrorResponse struct {
 // 1. Create a TEXT media container (POST /v1.0/{user_id}/threads)
 // 2. Wait briefly, then publish it (POST /v1.0/{user_id}/threads_publish)
 func (c *Client) PublishTextPost(ctx context.Context, text string) (*PublishResult, error) {
+	return c.publishText(ctx, text, "")
+}
+
+// PublishReplyPost publishes a TEXT reply attached to replyToID.
+func (c *Client) PublishReplyPost(ctx context.Context, replyToID, text string) (*PublishResult, error) {
+	if strings.TrimSpace(replyToID) == "" {
+		return nil, errors.New("reply_to_id cannot be empty")
+	}
+	return c.publishText(ctx, text, replyToID)
+}
+
+func (c *Client) publishText(ctx context.Context, text, replyToID string) (*PublishResult, error) {
 	if c.userID == "" {
 		return nil, errors.New("THREADS_USER_ID is not set")
 	}
@@ -73,7 +85,7 @@ func (c *Client) PublishTextPost(ctx context.Context, text string) (*PublishResu
 		return nil, errors.New("post text cannot be empty")
 	}
 
-	containerID, err := c.createTextContainer(ctx, text)
+	containerID, err := c.createTextContainer(ctx, text, replyToID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,11 +108,14 @@ func (c *Client) PublishTextPost(ctx context.Context, text string) (*PublishResu
 	}, nil
 }
 
-func (c *Client) createTextContainer(ctx context.Context, text string) (string, error) {
+func (c *Client) createTextContainer(ctx context.Context, text, replyToID string) (string, error) {
 	endpoint := fmt.Sprintf("%s/v1.0/%s/threads", graphBaseURL, url.PathEscape(c.userID))
 	form := url.Values{}
 	form.Set("media_type", "TEXT")
 	form.Set("text", text)
+	if strings.TrimSpace(replyToID) != "" {
+		form.Set("reply_to_id", replyToID)
+	}
 	form.Set("access_token", c.accessToken)
 
 	body, err := c.doFormPost(ctx, endpoint, form)

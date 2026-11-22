@@ -37,7 +37,7 @@ func Load() Config {
 	return Config{
 		Port:               getEnvOrDefault("PORT", "8080"),
 		GeminiAPIKey:       strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiModel:        getEnvOrDefault("GEMINI_MODEL", "gemini-2.5-flash"),
+		GeminiModel:        getEnvOrDefault("GEMINI_MODEL", "gemini-4-hydrogen"),
 		PromptsDir:         getEnvOrDefault("PROMPTS_DIR", "prompts"),
 		ThreadsUserID:      strings.TrimSpace(os.Getenv("THREADS_USER_ID")),
 		ThreadsAccessToken: strings.TrimSpace(os.Getenv("THREADS_ACCESS_TOKEN")),

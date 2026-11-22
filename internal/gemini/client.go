@@ -69,8 +69,10 @@ type part struct {
 	Text string `json:"text"`
 }
 
+type googleSearchTool struct{}
+
 type tool struct {
-	GoogleSearch map[string]any `json:"google_search,omitempty"`
+	GoogleSearch *googleSearchTool `json:"google_search,omitempty"`
 }
 
 type generateResponse struct {
@@ -123,7 +125,7 @@ func (c *Client) FetchIrelandNewsHeadlines(ctx context.Context, language string,
 			},
 		},
 		Tools: []tool{
-			{GoogleSearch: map[string]any{}},
+			{GoogleSearch: &googleSearchTool{}},
 		},
 	}
 

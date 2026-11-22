@@ -127,17 +127,25 @@ func main() {
 		var replies []threads.PublishResult
 		parentID := pubRes.PostID
 		for i, replyText := range replyTexts {
-			// Brief pause between chained posts so Threads indexes the parent post.
-			select {
-			case <-r.Context().Done():
-				writeError(w, http.StatusRequestTimeout, r.Context().Err().Error())
-				return
-			case <-time.After(2 * time.Second):
-			}
+			var repRes *threads.PublishResult
+			var repErr error
+			// Threads takes a few seconds to index a newly published post before it accepts reply_to_id.
+			for attempt := 1; attempt <= 3; attempt++ {
+				select {
+				case <-r.Context().Done():
+					writeError(w, http.StatusRequestTimeout, r.Context().Err().Error())
+					return
+				case <-time.After(6 * time.Second):
+				}
 
-			repRes, err := threadsClient.PublishReplyPost(r.Context(), parentID, replyText)
-			if err != nil {
-				logger.Error("failed to publish reply to threads", "reply_index", i, "parent_id", parentID, "error", err)
+				repRes, repErr = threadsClient.PublishReplyPost(r.Context(), parentID, replyText)
+				if repErr == nil {
+					break
+				}
+				logger.Warn("reply attempt failed; retrying", "reply_index", i, "attempt", attempt, "parent_id", parentID, "error", repErr)
+			}
+			if repErr != nil {
+				logger.Error("failed to publish reply to threads", "reply_index", i, "parent_id", parentID, "error", repErr)
 				break
 			}
 			logger.Info("published source links reply to Threads", "reply_index", i, "post_id", repRes.PostID, "parent_id", parentID)

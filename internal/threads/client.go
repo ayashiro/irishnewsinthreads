@@ -53,9 +53,12 @@ type TokenRefreshResult struct {
 
 type apiErrorResponse struct {
 	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    int    `json:"code"`
+		Message      string `json:"message"`
+		Type         string `json:"type"`
+		Code         int    `json:"code"`
+		ErrorSubcode int    `json:"error_subcode"`
+		UserTitle    string `json:"error_user_title"`
+		UserMsg      string `json:"error_user_msg"`
 	} `json:"error"`
 }
 
@@ -237,7 +240,11 @@ func (c *Client) execute(req *http.Request) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var apiErr apiErrorResponse
 		if json.Unmarshal(body, &apiErr) == nil && apiErr.Error != nil {
-			return nil, fmt.Errorf("threads api error (%d %s): %s", apiErr.Error.Code, apiErr.Error.Type, apiErr.Error.Message)
+			detail := apiErr.Error.Message
+			if apiErr.Error.UserMsg != "" {
+				detail += " / " + apiErr.Error.UserMsg
+			}
+			return nil, fmt.Errorf("threads api error (%d/%d %s): %s", apiErr.Error.Code, apiErr.Error.ErrorSubcode, apiErr.Error.Type, detail)
 		}
 		return nil, fmt.Errorf("threads api returned status %d: %s", resp.StatusCode, string(body))
 	}

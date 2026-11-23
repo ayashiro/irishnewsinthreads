@@ -63,10 +63,10 @@ type apiErrorResponse struct {
 }
 
 // PublishTextPost performs the 2-step Meta Threads API publishing flow:
-// 1. Create a TEXT media container (POST /v1.0/{user_id}/threads)
+// 1. Create a TEXT media container (POST /v1.0/{user_id}/threads) with optional topic_tag
 // 2. Wait briefly, then publish it (POST /v1.0/{user_id}/threads_publish)
-func (c *Client) PublishTextPost(ctx context.Context, text string) (*PublishResult, error) {
-	return c.publishText(ctx, text, "")
+func (c *Client) PublishTextPost(ctx context.Context, text, topicTag string) (*PublishResult, error) {
+	return c.publishText(ctx, text, "", topicTag)
 }
 
 // PublishReplyPost publishes a TEXT reply attached to replyToID.
@@ -74,10 +74,10 @@ func (c *Client) PublishReplyPost(ctx context.Context, replyToID, text string) (
 	if strings.TrimSpace(replyToID) == "" {
 		return nil, errors.New("reply_to_id cannot be empty")
 	}
-	return c.publishText(ctx, text, replyToID)
+	return c.publishText(ctx, text, replyToID, "")
 }
 
-func (c *Client) publishText(ctx context.Context, text, replyToID string) (*PublishResult, error) {
+func (c *Client) publishText(ctx context.Context, text, replyToID, topicTag string) (*PublishResult, error) {
 	if c.userID == "" {
 		return nil, errors.New("THREADS_USER_ID is not set")
 	}
@@ -88,7 +88,7 @@ func (c *Client) publishText(ctx context.Context, text, replyToID string) (*Publ
 		return nil, errors.New("post text cannot be empty")
 	}
 
-	containerID, err := c.createTextContainer(ctx, text, replyToID)
+	containerID, err := c.createTextContainer(ctx, text, replyToID, topicTag)
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +111,16 @@ func (c *Client) publishText(ctx context.Context, text, replyToID string) (*Publ
 	}, nil
 }
 
-func (c *Client) createTextContainer(ctx context.Context, text, replyToID string) (string, error) {
+func (c *Client) createTextContainer(ctx context.Context, text, replyToID, topicTag string) (string, error) {
 	endpoint := fmt.Sprintf("%s/v1.0/%s/threads", graphBaseURL, url.PathEscape(c.userID))
 	form := url.Values{}
 	form.Set("media_type", "TEXT")
 	form.Set("text", text)
 	if strings.TrimSpace(replyToID) != "" {
 		form.Set("reply_to_id", replyToID)
+	}
+	if tag := sanitizeTopicTag(topicTag); tag != "" {
+		form.Set("topic_tag", tag)
 	}
 	form.Set("access_token", c.accessToken)
 
@@ -250,4 +253,17 @@ func (c *Client) execute(req *http.Request) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// sanitizeTopicTag enforces Meta Threads topic_tag rules (no #, ., &; max 50 chars).
+func sanitizeTopicTag(raw string) string {
+	tag := strings.TrimSpace(raw)
+	tag = strings.TrimPrefix(tag, "#")
+	tag = strings.NewReplacer(".", "", "&", "").Replace(tag)
+	tag = strings.TrimSpace(tag)
+	runes := []rune(tag)
+	if len(runes) > 50 {
+		tag = string(runes[:50])
+	}
+	return tag
 }

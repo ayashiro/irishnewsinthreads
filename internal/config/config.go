@@ -14,6 +14,7 @@ type Config struct {
 	PromptsDir         string
 	ThreadsUserID      string
 	ThreadsAccessToken string
+	ThreadsTopicTag    string
 	PostLanguage       string
 	NewsCount          int
 	APISecret          string
@@ -41,6 +42,7 @@ func Load() Config {
 		PromptsDir:         getEnvOrDefault("PROMPTS_DIR", "prompts"),
 		ThreadsUserID:      strings.TrimSpace(os.Getenv("THREADS_USER_ID")),
 		ThreadsAccessToken: strings.TrimSpace(os.Getenv("THREADS_ACCESS_TOKEN")),
+		ThreadsTopicTag:    getEnvOrDefault("THREADS_TOPIC_TAG", "アイルランド"),
 		PostLanguage:       getEnvOrDefault("POST_LANGUAGE", "ja"),
 		NewsCount:          newsCount,
 		APISecret:          strings.TrimSpace(os.Getenv("API_SECRET")),

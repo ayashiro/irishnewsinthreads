@@ -14,6 +14,7 @@ import (
 
 type jobOutput struct {
 	DryRun     bool                    `json:"dry_run"`
+	TopicTag   string                  `json:"topic_tag,omitempty"`
 	PostText   string                  `json:"post_text"`
 	ReplyTexts []string                `json:"reply_texts,omitempty"`
 	Sources    []gemini.Source         `json:"sources,omitempty"`
@@ -45,6 +46,7 @@ func main() {
 
 	out := jobOutput{
 		DryRun:     cfg.DryRun,
+		TopicTag:   cfg.ThreadsTopicTag,
 		PostText:   news.PostText,
 		ReplyTexts: replyTexts,
 		Sources:    news.Sources,
@@ -57,7 +59,7 @@ func main() {
 	}
 
 	threadsClient := threads.NewClient(cfg.ThreadsUserID, cfg.ThreadsAccessToken)
-	pubRes, err := threadsClient.PublishTextPost(ctx, news.PostText)
+	pubRes, err := threadsClient.PublishTextPost(ctx, news.PostText, cfg.ThreadsTopicTag)
 	if err != nil {
 		logger.Error("failed to publish to threads", "error", err)
 		os.Exit(1)

@@ -113,7 +113,7 @@ func main() {
 			return
 		}
 
-		pubRes, err := threadsClient.PublishTextPost(r.Context(), news.PostText)
+		pubRes, err := threadsClient.PublishTextPost(r.Context(), news.PostText, cfg.ThreadsTopicTag)
 		if err != nil {
 			logger.Error("failed to publish to threads", "error", err)
 			writeError(w, http.StatusBadGateway, err.Error())

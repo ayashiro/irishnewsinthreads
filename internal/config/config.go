@@ -23,7 +23,7 @@ type Config struct {
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() Config {
-	newsCount := 3
+	newsCount := 5
 	if v := strings.TrimSpace(os.Getenv("NEWS_COUNT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 10 {
 			newsCount = n

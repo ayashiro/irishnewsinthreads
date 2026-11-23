@@ -13,7 +13,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"threads-news/internal/config"
 	"threads-news/internal/gemini"
@@ -270,75 +269,10 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-// buildSourceReplies formats resolved source URLs into one or more Threads replies,
-// staying safely within Threads' 500-character limit and 5-unique-links-per-post limit.
 func buildSourceReplies(sources []gemini.Source, language string) []string {
-	if len(sources) == 0 {
-		return nil
-	}
-
-	const (
-		maxReplyRunes    = 480
-		maxSources       = 4
-		maxLinksPerReply = 4 // Threads allows at most 5 unique links per post.
-	)
-
-	header := "🔗 参考リンク（記事元）"
-	if strings.EqualFold(language, "en") {
-		header = "🔗 Source links"
-	}
-
-	// Prefer unique domains so replies cover diverse news items.
-	var urls []string
-	seenDomain := make(map[string]struct{})
+	links := make([]threads.SourceLink, 0, len(sources))
 	for _, s := range sources {
-		if len(urls) >= maxSources {
-			break
-		}
-		uri := strings.TrimSpace(s.URI)
-		if uri == "" {
-			continue
-		}
-		if strings.Contains(uri, "vertexaisearch.cloud.google.com/grounding-api-redirect/") && utf8.RuneCountInString(uri) > 150 {
-			continue
-		}
-		domain := strings.ToLower(strings.TrimSpace(s.Title))
-		if domain != "" {
-			if _, exists := seenDomain[domain]; exists {
-				continue
-			}
-			seenDomain[domain] = struct{}{}
-		}
-		// Only include the URL itself (omitting bare domain titles, which Threads also counts as links).
-		entry := "・" + uri
-		if utf8.RuneCountInString(entry) > maxReplyRunes-30 {
-			continue
-		}
-		urls = append(urls, entry)
+		links = append(links, threads.SourceLink{Title: s.Title, URI: s.URI})
 	}
-
-	if len(urls) == 0 {
-		return nil
-	}
-
-	var replies []string
-	current := header
-	linksInCurrent := 0
-	for _, entry := range urls {
-		candidate := current + "\n" + entry
-		if linksInCurrent < maxLinksPerReply && utf8.RuneCountInString(candidate) <= maxReplyRunes {
-			current = candidate
-			linksInCurrent++
-			continue
-		}
-		if current != header {
-			replies = append(replies, current)
-		}
-		current = header + "\n" + entry
-		linksInCurrent = 1
-	}
-	if current != header {
-		replies = append(replies, current)
-	}
-	return replies
+	return threads.BuildSourceReplies(links, language)
 }

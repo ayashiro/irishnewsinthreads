@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,14 +172,20 @@ func (c *Client) FetchIrelandNewsHeadlines(ctx context.Context, language string,
 	for _, p := range parsed.Candidates[0].Content.Parts {
 		sb.WriteString(p.Text)
 	}
-	text := strings.TrimSpace(sb.String())
-	if text == "" {
+	rawText := strings.TrimSpace(sb.String())
+	if rawText == "" {
 		return nil, errors.New("gemini returned empty text")
 	}
-	text = truncateRunes(text, maxThreadsPostRunes)
+
+	postBody, promptURLs := splitBodyAndSources(rawText)
+	if postBody == "" {
+		return nil, errors.New("gemini returned empty post body")
+	}
+	text := truncateRunes(postBody, maxThreadsPostRunes)
 
 	var sources []Source
 	seen := make(map[string]struct{})
+	// 1. Prefer verified Google Search grounding chunks first.
 	for _, chunk := range parsed.Candidates[0].GroundingMetadata.GroundingChunks {
 		if chunk.Web == nil || chunk.Web.URI == "" {
 			continue
@@ -193,11 +200,65 @@ func (c *Client) FetchIrelandNewsHeadlines(ctx context.Context, language string,
 			URI:   resolvedURI,
 		})
 	}
+	// 2. Supplement / fallback with URLs explicitly returned after ---SOURCES---.
+	for _, rawURI := range promptURLs {
+		resolvedURI := c.resolveRedirectURL(ctx, rawURI)
+		if _, ok := seen[resolvedURI]; ok {
+			continue
+		}
+		seen[resolvedURI] = struct{}{}
+		host := ""
+		if u, err := url.Parse(resolvedURI); err == nil {
+			host = strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+		}
+		sources = append(sources, Source{
+			Title: host,
+			URI:   resolvedURI,
+		})
+	}
 
 	return &NewsResult{
 		PostText: text,
 		Sources:  sources,
 	}, nil
+}
+
+// splitBodyAndSources separates the Threads post body from URLs listed after "---SOURCES---".
+func splitBodyAndSources(raw string) (string, []string) {
+	const sep = "---SOURCES---"
+	idx := strings.Index(raw, sep)
+	if idx < 0 {
+		return strings.TrimSpace(raw), nil
+	}
+
+	body := strings.TrimSpace(raw[:idx])
+	tail := raw[idx+len(sep):]
+
+	var urls []string
+	for _, line := range strings.Split(tail, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimLeft(line, "-・*• ")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Extract the first https:// or http:// token on the line.
+		start := strings.Index(line, "https://")
+		if start < 0 {
+			start = strings.Index(line, "http://")
+		}
+		if start < 0 {
+			continue
+		}
+		candidate := line[start:]
+		if fields := strings.Fields(candidate); len(fields) > 0 {
+			candidate = strings.TrimRight(fields[0], ".,)>]\"'")
+		}
+		if u, err := url.Parse(candidate); err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" {
+			urls = append(urls, candidate)
+		}
+	}
+	return body, urls
 }
 
 // resolveRedirectURL resolves Gemini grounding redirect URLs to the actual article URL.

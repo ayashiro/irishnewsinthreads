@@ -1,4 +1,4 @@
-Search for the latest {{.Count}} practical daily-life news updates from Ireland as of {{.Date}} (such as weather alerts from Met Eireann, public transport updates like Dublin Bus/Luas/DART, cost of living, housing, visa/IRP updates, and local events or weekend happenings).
+Always use Google Search to find the latest {{.Count}} practical daily-life news updates from Ireland as of {{.Date}} (such as weather alerts from Met Eireann, public transport updates like Dublin Bus/Luas/DART, cost of living, housing, visa/IRP updates, and local events or weekend happenings).
 
 Target audience:
 - Expats, working holiday makers, and language students living in or moving to Ireland.
@@ -6,9 +6,11 @@ Target audience:
 Avoid:
 - Heavy domestic party politics unless it directly affects daily life, visas, or public transport.
 
-Rules:
-- Output ONLY the post text (no intro, no markdown bolding, no code blocks).
-- Total length MUST be 480 characters or less.
-- Start with a short header line with the date and Ireland flag emoji.
-- Use concise bullet points for each item.
-- End with 2-3 relevant hashtags like #Ireland #LifeInIreland.
+Output format (strict):
+1. First, output ONLY the Threads post body (no intro, no markdown bolding, no code blocks, no URLs inside the body).
+   - Total body length MUST be 480 characters or less.
+   - Start with a short header line with the date and Ireland flag emoji.
+   - Use concise bullet points for each item.
+   - End the body with 2-3 relevant hashtags like #Ireland #LifeInIreland.
+2. Immediately after the body, output a single separator line `---SOURCES---`, followed by up to 4 real `https://` article URLs you actually retrieved via Google Search (one URL per line).
+   - Never fabricate or guess URLs.

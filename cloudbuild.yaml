@@ -1,0 +1,32 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/threads-ireland-news:$SHORT_SHA
+      - -t
+      - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/threads-ireland-news:latest
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/threads-ireland-news
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - update
+      - threads-ireland-news
+      - --region=asia-northeast1
+      - --image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/threads-ireland-news:$SHORT_SHA
+
+images:
+  - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/threads-ireland-news:$SHORT_SHA
+  - asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/threads-ireland-news:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY

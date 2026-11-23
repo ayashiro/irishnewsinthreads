@@ -92,30 +92,36 @@ curl -G "https://graph.threads.net/refresh_access_token" \
 
 ---
 
-## Deploying to Google Cloud Run
+## Deploying to Google Cloud Run Job
 
-From WSL, navigate to the project directory and deploy with `gcloud`:
+From WSL, navigate to the project directory and deploy as a **Cloud Run Job**:
 
 ```bash
 cd "/home/kenta/threads news"
 
-gcloud run deploy threads-ireland-news \
+gcloud run jobs deploy threads-ireland-news \
   --source . \
   --region asia-northeast1 \
-  --no-allow-unauthenticated \
-  --set-env-vars "GEMINI_API_KEY=YOUR_GEMINI_KEY,THREADS_USER_ID=YOUR_USER_ID,THREADS_ACCESS_TOKEN=YOUR_TOKEN,POST_LANGUAGE=ja,NEWS_COUNT=3,API_SECRET=YOUR_SECRET"
+  --task-timeout 5m \
+  --max-retries 1 \
+  --set-env-vars "GEMINI_API_KEY=YOUR_GEMINI_KEY,GEMINI_MODEL=gemini-4-hydrogen,THREADS_USER_ID=YOUR_USER_ID,THREADS_ACCESS_TOKEN=YOUR_TOKEN,POST_LANGUAGE=ja,NEWS_COUNT=3"
 ```
 
 > For production, store secrets in **Google Cloud Secret Manager** and inject them with `--set-secrets`.
 
-### Test Preview (Dry Run)
+### Manual Execution & Dry Run
+Run the job on demand:
 ```bash
-curl -X POST "https://<YOUR_CLOUD_RUN_URL>/preview" \
-  -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
-  -H "X-API-Secret: YOUR_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"language":"ja","count":3}'
+gcloud run jobs execute threads-ireland-news --region asia-northeast1
 ```
 
-### Scheduled Posting
-Create a **Cloud Scheduler** job to send an authenticated `POST` request to `https://<YOUR_CLOUD_RUN_URL>/publish` on your desired schedule (e.g., daily at 08:00 Europe/Dublin).
+Or run locally in dry-run mode (prints the main post and URL reply without publishing to Threads):
+```bash
+DRY_RUN=true go run ./cmd/job
+```
+
+### Scheduled Posting (3x Daily — Ireland Time)
+Cloud Scheduler triggers the Cloud Run Job 3 times a day at **08:00, 12:00, and 21:00 (`Europe/Dublin`)**:
+- Cron: `0 8,12,21 * * *`
+- Time zone: `Europe/Dublin`
+- Target: `POST https://asia-northeast1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/threads-ireland-news:run` (OAuth authenticated)

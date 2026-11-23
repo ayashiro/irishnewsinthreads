@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -272,62 +271,71 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 // buildSourceReplies formats resolved source URLs into one or more Threads replies,
-// each safely within Threads' 500-character limit.
+// staying safely within Threads' 500-character limit and 5-unique-links-per-post limit.
 func buildSourceReplies(sources []gemini.Source, language string) []string {
 	if len(sources) == 0 {
 		return nil
 	}
 
-	const maxReplyRunes = 480
-	const maxSources = 4
+	const (
+		maxReplyRunes    = 480
+		maxSources       = 4
+		maxLinksPerReply = 4 // Threads allows at most 5 unique links per post.
+	)
 
 	header := "🔗 参考リンク（記事元）"
 	if strings.EqualFold(language, "en") {
 		header = "🔗 Source links"
 	}
 
-	var entries []string
+	// Prefer unique domains so replies cover diverse news items.
+	var urls []string
+	seenDomain := make(map[string]struct{})
 	for _, s := range sources {
-		if len(entries) >= maxSources {
+		if len(urls) >= maxSources {
 			break
 		}
 		uri := strings.TrimSpace(s.URI)
 		if uri == "" {
 			continue
 		}
-		// Skip unresolved Vertex redirect URLs that are too long and ugly for users.
 		if strings.Contains(uri, "vertexaisearch.cloud.google.com/grounding-api-redirect/") && utf8.RuneCountInString(uri) > 150 {
 			continue
 		}
-		title := strings.TrimSpace(s.Title)
-		var entry string
-		if title != "" {
-			entry = fmt.Sprintf("・%s\n%s", title, uri)
-		} else {
-			entry = fmt.Sprintf("・%s", uri)
+		domain := strings.ToLower(strings.TrimSpace(s.Title))
+		if domain != "" {
+			if _, exists := seenDomain[domain]; exists {
+				continue
+			}
+			seenDomain[domain] = struct{}{}
 		}
+		// Only include the URL itself (omitting bare domain titles, which Threads also counts as links).
+		entry := "・" + uri
 		if utf8.RuneCountInString(entry) > maxReplyRunes-30 {
 			continue
 		}
-		entries = append(entries, entry)
+		urls = append(urls, entry)
 	}
 
-	if len(entries) == 0 {
+	if len(urls) == 0 {
 		return nil
 	}
 
 	var replies []string
 	current := header
-	for _, entry := range entries {
+	linksInCurrent := 0
+	for _, entry := range urls {
 		candidate := current + "\n" + entry
-		if utf8.RuneCountInString(candidate) <= maxReplyRunes {
+		if linksInCurrent < maxLinksPerReply && utf8.RuneCountInString(candidate) <= maxReplyRunes {
 			current = candidate
+			linksInCurrent++
 			continue
 		}
 		if current != header {
 			replies = append(replies, current)
 		}
 		current = header + "\n" + entry
+		linksInCurrent = 1
 	}
 	if current != header {
 		replies = append(replies, current)
